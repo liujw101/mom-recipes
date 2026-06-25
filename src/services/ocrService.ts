@@ -4,11 +4,7 @@ import {
   looksLikeFailedChineseOcr,
   normalizeChineseOcrText,
 } from "./chineseOcrPostprocess";
-import {
-  loadImageFromFile,
-  prepareImagesForChineseOCR,
-  type PreparedImage,
-} from "./imagePreprocess";
+import { loadImageFromFile, prepareImagesForChineseOCR } from "./imagePreprocess";
 
 export type ChineseScript = "simplified" | "traditional" | "both";
 
