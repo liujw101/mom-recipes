@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportRecipesJson, getAllRecipes, importRecipesJson, matchesSearch } from "../db/recipeStore";
-import type { LibraryFilter, ParsedRecipe, Recipe, Screen } from "../types/recipe";
+import type { LibraryFilter, Recipe, Screen } from "../types/recipe";
 import { styles } from "../styles";
 
 interface Props {
