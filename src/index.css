@@ -1,0 +1,30 @@
+:root {
+  --bg: #fff8f0;
+  --card: #ffffff;
+  --text: #2c1810;
+  --muted: #7a6558;
+  --accent: #c45c26;
+  --border: #e8ddd4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 80px;
+}
