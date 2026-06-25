@@ -86,7 +86,13 @@ export function parseRecipeText(ocrText: string): ParsedRecipe {
 }
 
 function matchesHeader(line: string, headers: string[]): boolean {
-  return headers.some((h) => line === h || line.startsWith(`${h}:`));
+  const lower = line.toLowerCase();
+  return headers.some((h) => {
+    if (/[\u4e00-\u9fff]/.test(h)) {
+      return line === h || line.startsWith(`${h}：`) || line.startsWith(`${h}:`);
+    }
+    return lower === h || lower.startsWith(`${h}:`);
+  });
 }
 
 function looksLikeStep(line: string): boolean {
