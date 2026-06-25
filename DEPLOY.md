@@ -68,7 +68,42 @@ When green, open: **https://liujw101.github.io/mom-recipes/**
 
 ---
 
-## Step 5 — Mom installs on iPhone
+## Step 4 — Enable smart scan for handwritten Chinese (recommended)
+
+Mom's recipes are **handwritten Chinese with English mixed in**. Basic OCR cannot read that well. Smart scan uses **Google Gemini Vision** (free tier).
+
+### 4a. Create a free API key
+
+1. Open https://aistudio.google.com/apikey
+2. Click **Create API key**
+3. (Recommended) In Google Cloud Console, restrict the key:
+   - **Application restrictions** → **Websites**
+   - Add: `https://liujw101.github.io/mom-recipes/*`
+
+### 4b. Add key to GitHub Secrets
+
+```powershell
+gh secret set VITE_GEMINI_API_KEY --repo liujw101/mom-recipes
+# Paste your API key when prompted
+```
+
+Or: GitHub → **mom-recipes** repo → **Settings** → **Secrets and variables** → **Actions** → **New secret**
+- Name: `VITE_GEMINI_API_KEY`
+- Value: your Gemini API key
+
+### 4c. Redeploy
+
+```powershell
+gh workflow run deploy.yml --repo liujw101/mom-recipes
+```
+
+After deploy, the scan screen shows **"Smart scan on"** in green.
+
+**Cost:** Gemini free tier is generous for family use (typically 1000+ scans/day). No credit card required for AI Studio keys in many regions.
+
+---
+
+## Step 6 — Mom installs on iPhone
 
 1. Send Mom the link: `https://liujw101.github.io/mom-recipes/`
 2. She opens it in **Safari** (not Chrome)
