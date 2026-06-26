@@ -13,6 +13,7 @@ interface Props {
   photoDataUrl?: string;
   isNew?: boolean;
   importError?: string;
+  importMethod?: "gemini" | "ocr";
   onSave: (recipe: Recipe) => void;
   onCancel: () => void;
 }
@@ -38,6 +39,7 @@ export function EditRecipeView({
   photoDataUrl,
   isNew,
   importError,
+  importMethod,
   onSave,
   onCancel,
 }: Props) {
@@ -91,6 +93,22 @@ export function EditRecipeView({
       </div>
 
       <div style={styles.section}>
+        {importMethod === "ocr" && !importError && (
+          <div
+            style={{
+              background: "#e3f2fd",
+              color: "#1565c0",
+              padding: "12px 14px",
+              borderRadius: 10,
+              marginBottom: 16,
+              lineHeight: 1.5,
+              fontSize: "0.95rem",
+            }}
+          >
+            Basic read — please review title, ingredients, and steps before saving.
+          </div>
+        )}
+
         {importError && (
           <div
             style={{

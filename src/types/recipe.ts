@@ -50,6 +50,7 @@ export type Screen =
       draft?: Partial<Recipe>;
       photoDataUrl?: string;
       importError?: string;
+      importMethod?: "gemini" | "ocr";
     }
   | { name: "notegpt-import" };
 

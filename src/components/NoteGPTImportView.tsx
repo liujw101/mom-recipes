@@ -13,6 +13,7 @@ const NOTEGPT_URL = "https://notegpt.io/ai-image-translator";
 export interface NoteGPTImportResult {
   recipe: Recipe;
   importError?: string;
+  importMethod?: "gemini" | "ocr";
 }
 
 interface Props {
@@ -41,12 +42,12 @@ export function NoteGPTImportView({ onCancel, onComplete }: Props) {
       const pngDataUrl = await fileToDataUrl(file);
 
       try {
-        const parsed = await extractRecipeFromNoteGPTPng(file, setProgress);
+        const { parsed, importMethod } = await extractRecipeFromNoteGPTPng(file, setProgress);
         if (!parsedRecipeHasContent(parsed)) {
           throw new Error("No recipe text found in the PNG.");
         }
         const recipe = buildRecipe(parsed, pngDataUrl, pendingOriginal);
-        onComplete({ recipe });
+        onComplete({ recipe, importMethod });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Import failed";
         setFailedImport({ pngDataUrl, message });

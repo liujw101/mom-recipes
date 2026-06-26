@@ -1,13 +1,16 @@
 import type { ParsedIngredient, ParsedRecipe, RecipeLanguage } from "../types/recipe";
 
-/** Split "2 cups flour" → { amount: "2 cups", text: "flour" } */
+/** Split "2 cups flour" or "1/2 cup of rice" → { amount, text } */
 export function splitIngredientLine(line: string): ParsedIngredient {
   const trimmed = stripBullet(line.trim());
   if (!trimmed) return { text: "" };
 
   const amountPatterns = [
+    /^([\d½¼¾⅓⅔]+(?:\s*\/\s*\d+)?\s*(?:cups?|tbsp|tsp|oz|lb|lbs|g|kg|ml|l|cloves?|pieces?|slices?|pinch(?:es)?|dash(?:es)?|bunch(?:es)?|heads?|stalks?|can(?:s)?|package(?:s)?|pkg)\.?\s+of\s+)(.+)$/i,
     /^([\d½¼¾⅓⅔]+\s*(?:\/\d+\s*)?(?:cups?|tbsp|tsp|oz|lb|lbs|g|kg|ml|l|cloves?|pieces?|slices?|pinch(?:es)?|dash(?:es)?|bunch(?:es)?|heads?|stalks?|can(?:s)?|package(?:s)?|pkg)\.?\s+)(.+)$/i,
+    /^([\d½¼¾⅓⅔]+(?:\.\d+)?\s*(?:g|kg|ml|l|oz)\.?\s+of\s+)(.+)$/i,
     /^([\d½¼¾⅓⅔]+(?:\.\d+)?\s*(?:g|kg|ml|l|oz)\.?\s+)(.+)$/i,
+    /^(a\s+pinch\s+of\s+)(.+)$/i,
     /^([\d½¼¾⅓⅔]+(?:\.\d+)?\s+)(.+)$/,
   ];
 
