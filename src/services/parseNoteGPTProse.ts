@@ -1,5 +1,4 @@
 import type { ParsedIngredient, ParsedRecipe } from "../types/recipe";
-import { splitIngredientLine } from "./normalizeRecipeJson";
 import { parseRecipeText } from "./recipeParser";
 
 const STRUCTURED_HEADER =
@@ -39,9 +38,8 @@ function fixOcrGlitch(text: string): string {
     .replace(/\b(\d+)\s+cu\s+p\b/gi, "$1 cup")
     .replace(/\bcu\s+p\b/gi, "cup")
     .replace(/\bcu\s+of\b/gi, "cup of")
-    .replace(/\|/g, "l")
-    .replace(/\[/g, "")
-    .replace(/\]/g, "")
+    .replace(/[|\[\]]/g, " ")
+    .replace(/\s+([,.;)])/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -63,50 +61,66 @@ function extractTitle(reflowed: string): { title: string; body: string } {
   return { title, body };
 }
 
-function extractIngredients(text: string): ParsedIngredient[] {
-  const ingredients: ParsedIngredient[] = [];
-  const seen = new Set<string>();
+interface Candidate {
+  amount?: string;
+  text: string;
+  index: number;
+}
 
-  function add(amount: string | undefined, text: string) {
-    const cleaned = text.replace(/\s+and\s*$/i, "").trim();
-    if (!cleaned) return;
-    const key = `${amount ?? ""}|${cleaned}`.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    ingredients.push({ amount: amount?.trim() || undefined, text: cleaned });
+const INGREDIENT_BOUNDARY = "(?=\\s+and\\b|[,;.()]|$)";
+
+function extractIngredients(text: string): ParsedIngredient[] {
+  const candidates: Candidate[] = [];
+
+  function push(amount: string | undefined, raw: string, index: number) {
+    const cleaned = raw.replace(/\s+and\s*$/i, "").trim();
+    if (cleaned.length < 2) return;
+    candidates.push({ amount: amount?.trim() || undefined, text: cleaned, index });
   }
 
+  // Parenthetical spice lists, e.g. "(add star anise, a small piece of cinnamon, and bay leaf)"
   const parenRe = /\((?:add\s+)?([^)]+)\)/gi;
   let parenMatch: RegExpExecArray | null;
   while ((parenMatch = parenRe.exec(text)) !== null) {
-    const parts = parenMatch[1].split(/,\s*|\s+and\s+/i);
+    const inner = parenMatch[1];
+    const parts = inner.split(/,\s*|\s+and\s+/i);
+    let cursor = 0;
     for (const part of parts) {
+      const partIndex = parenMatch.index + inner.indexOf(part, cursor);
+      cursor = inner.indexOf(part, cursor) + part.length;
       const spice = part.replace(/^a\s+small\s+piece\s+of\s+/i, "").trim();
-      if (spice.length > 1) add(undefined, spice);
+      if (spice.length > 1) push(undefined, spice, partIndex);
     }
   }
 
   const patterns: RegExp[] = [
-    /(\d+(?:\.\d+)?\s*(?:g|kg|ml|l|oz))\s+of\s+([^,;.(]+)/gi,
-    /(\d+\/\d+\s*cups?)\s+of\s+([^,;.(]+)/gi,
-    /(\d+\s*tsp)\s+of\s+([^,;.(]+)/gi,
-    /(\d+\s*ml)\s+(?:of\s+)?([^,;.(]+)/gi,
-    /(a\s+pinch\s+of\s+[^,;.(]+)/gi,
+    new RegExp(`(\\d+(?:\\.\\d+)?\\s*(?:g|kg|ml|oz))\\s+of\\s+(.+?)${INGREDIENT_BOUNDARY}`, "gi"),
+    new RegExp(`(\\d+\\/\\d+\\s*cups?)\\s+of\\s+(.+?)${INGREDIENT_BOUNDARY}`, "gi"),
+    new RegExp(`(\\d+\\s*tsp)\\s+of\\s+(.+?)${INGREDIENT_BOUNDARY}`, "gi"),
+    new RegExp(`(a\\s+pinch\\s+of\\s+(.+?))${INGREDIENT_BOUNDARY}`, "gi"),
   ];
 
-  for (const pattern of patterns) {
+  for (const re of patterns) {
     let match: RegExpExecArray | null;
-    const re = new RegExp(pattern.source, pattern.flags);
     while ((match = re.exec(text)) !== null) {
-      if (match.length >= 3) {
-        add(match[1], match[2]);
-      } else if (match[1]) {
-        const parsed = splitIngredientLine(match[1]);
-        add(parsed.amount, parsed.text);
+      if (match[0].toLowerCase().startsWith("a pinch")) {
+        push("a pinch of", match[2], match.index);
+      } else {
+        push(match[1], match[2], match.index);
       }
     }
   }
 
+  candidates.sort((a, b) => a.index - b.index);
+
+  const seen = new Set<string>();
+  const ingredients: ParsedIngredient[] = [];
+  for (const c of candidates) {
+    const key = c.text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ingredients.push({ amount: c.amount, text: c.text });
+  }
   return ingredients;
 }
 

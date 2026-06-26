@@ -20,6 +20,13 @@ pinch of salt, 69ml of
 water, and marinate
 for one night.`;
 
+function findIngredient(
+  parsed: ReturnType<typeof parseNoteGPTProse>,
+  re: RegExp
+) {
+  return parsed.ingredients.find((i) => re.test(i.text));
+}
+
 describe("reflowOcrLines", () => {
   it("joins broken OCR lines and fixes common misreads", () => {
     const reflowed = reflowOcrLines(STEAMED_RICE_PORK_OCR);
@@ -27,28 +34,58 @@ describe("reflowOcrLines", () => {
     expect(reflowed).toContain("Steamed Rice Powder Pork.");
     expect(reflowed).toContain("450g of pork belly");
     expect(reflowed).toContain("1/2 cup of rice");
+    expect(reflowed).toContain("of cinnamon");
     expect(reflowed).not.toContain("4509");
-    expect(reflowed).not.toContain("1/2 cu");
+    expect(reflowed).not.toContain("1/2 cu ");
+    expect(reflowed).not.toContain("[");
+    expect(reflowed).not.toContain("|");
   });
 });
 
 describe("parseNoteGPTProse", () => {
-  it("extracts title, ingredients, and steps from prose NoteGPT OCR", () => {
-    const parsed = parseNoteGPTProse(STEAMED_RICE_PORK_OCR);
+  const parsed = parseNoteGPTProse(STEAMED_RICE_PORK_OCR);
 
+  it("extracts the dish name as title", () => {
     expect(parsed.title).toBe("Steamed Rice Powder Pork");
-    expect(parsed.ingredients.length).toBeGreaterThanOrEqual(6);
-    expect(parsed.ingredients.some((i) => /pork belly/i.test(i.text))).toBe(true);
-    expect(parsed.ingredients.some((i) => /rice/i.test(i.text))).toBe(true);
-    expect(parsed.ingredients.some((i) => /Sichuan peppercorns/i.test(i.text))).toBe(true);
+  });
+
+  it("splits rice and glutinous rice into separate ingredients", () => {
+    const texts = parsed.ingredients.map((i) => i.text.toLowerCase());
+    expect(texts).toContain("rice");
+    expect(texts).toContain("glutinous rice");
+  });
+
+  it("captures amounts for measured ingredients", () => {
+    expect(findIngredient(parsed, /pork belly/i)?.amount).toBe("450g");
+    expect(findIngredient(parsed, /^rice$/i)?.amount).toBe("1/2 cup");
+    expect(findIngredient(parsed, /Sichuan peppercorns/i)?.amount).toBe("1 tsp");
+    expect(findIngredient(parsed, /sesame oil/i)?.amount).toBe("2 tsp");
+    expect(findIngredient(parsed, /water/i)?.amount).toBe("69ml");
+    expect(findIngredient(parsed, /salt/i)?.amount).toBe("a pinch of");
+  });
+
+  it("extracts parenthetical spices cleanly without OCR artifacts", () => {
+    const cinnamon = findIngredient(parsed, /cinnamon/i);
+    expect(cinnamon?.text).toBe("cinnamon");
+    expect(findIngredient(parsed, /star anise/i)).toBeTruthy();
+    expect(findIngredient(parsed, /bay leaf/i)).toBeTruthy();
+  });
+
+  it("returns a sensible ingredient count, not one row per OCR line", () => {
+    expect(parsed.ingredients.length).toBeGreaterThanOrEqual(8);
+    expect(parsed.ingredients.length).toBeLessThanOrEqual(11);
+  });
+
+  it("orders ingredients by appearance in the recipe", () => {
+    const texts = parsed.ingredients.map((i) => i.text.toLowerCase());
+    expect(texts.indexOf("pork belly")).toBeLessThan(texts.indexOf("rice"));
+    expect(texts.indexOf("rice")).toBeLessThan(texts.indexOf("glutinous rice"));
+  });
+
+  it("splits the body into ordered cooking steps", () => {
     expect(parsed.steps.length).toBeGreaterThanOrEqual(2);
     expect(parsed.steps.some((s) => /slice/i.test(s))).toBe(true);
     expect(parsed.steps.some((s) => /marinate/i.test(s))).toBe(true);
-  });
-
-  it("does not treat every OCR line as a separate ingredient", () => {
-    const parsed = parseNoteGPTProse(STEAMED_RICE_PORK_OCR);
-    expect(parsed.ingredients.length).toBeLessThan(10);
   });
 });
 
