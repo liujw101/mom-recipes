@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { getRecipe, saveRecipe } from "./db/recipeStore";
-import { EditRecipeView, parsedToRecipe } from "./components/EditRecipeView";
+import { EditRecipeView } from "./components/EditRecipeView";
 import { LibraryView } from "./components/LibraryView";
+import { NoteGPTImportView } from "./components/NoteGPTImportView";
 import { OnboardingView } from "./components/OnboardingView";
 import { RecipeDetailView } from "./components/RecipeDetailView";
-import { ScanRecipeView } from "./components/ScanRecipeView";
 import { createEmptyRecipe, type Recipe, type Screen } from "./types/recipe";
 
 const ONBOARDING_KEY = "mom-recipes-onboarding-done";
@@ -42,13 +42,16 @@ export default function App() {
     return <OnboardingView onComplete={completeOnboarding} />;
   }
 
-  if (screen.name === "scan") {
+  if (screen.name === "notegpt-import") {
     return (
-      <ScanRecipeView
+      <NoteGPTImportView
         onCancel={() => setScreen({ name: "library" })}
-        onComplete={(parsed, photoDataUrl) => {
-          const recipe = parsedToRecipe(parsed, photoDataUrl);
-          setScreen({ name: "edit", recipeId: recipe.id, draft: recipe, photoDataUrl });
+        onComplete={(recipe) => {
+          setScreen({
+            name: "edit",
+            recipeId: recipe.id,
+            draft: recipe,
+          });
         }}
       />
     );

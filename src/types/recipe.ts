@@ -40,7 +40,18 @@ export type Screen =
   | { name: "library" }
   | { name: "detail"; recipeId: string }
   | { name: "edit"; recipeId?: string; draft?: Partial<Recipe>; photoDataUrl?: string }
-  | { name: "scan" };
+  | { name: "notegpt-import" };
+
+export function displayModeLabels(sourceLanguage: RecipeLanguage): {
+  primary: string;
+  secondary: string;
+  both: string;
+} {
+  if (sourceLanguage === "en") {
+    return { primary: "English", secondary: "Chinese", both: "Both" };
+  }
+  return { primary: "Original", secondary: "English", both: "Both" };
+}
 
 export const SUGGESTED_TAGS = [
   "Soup",

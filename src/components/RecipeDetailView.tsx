@@ -2,6 +2,7 @@ import { useState } from "react";
 import { deleteRecipe, saveRecipe } from "../db/recipeStore";
 import { translateRecipe } from "../services/translationService";
 import {
+  displayModeLabels,
   recipePlainText,
   type DisplayLanguage,
   type Recipe,
@@ -23,9 +24,19 @@ export function RecipeDetailView({
   onDeleted,
   onUpdated,
 }: Props) {
+  const labels = displayModeLabels(recipe.sourceLanguage);
   const [display, setDisplay] = useState<DisplayLanguage>("original");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  const segmentLabels: Record<DisplayLanguage, string> = {
+    original: labels.primary,
+    english: labels.secondary,
+    both: labels.both,
+  };
+
+  const translateLabel =
+    recipe.sourceLanguage === "en" ? "Translate to Chinese" : "Translate to English";
 
   async function toggleFavorite() {
     const updated = await saveRecipe({ ...recipe, isFavorite: !recipe.isFavorite });
@@ -67,7 +78,9 @@ export function RecipeDetailView({
     const text = recipePlainText(recipe, display);
     const win = window.open("", "_blank");
     if (!win) return;
-    win.document.write(`<pre style="font-family:sans-serif;padding:24px">${text.replace(/</g, "&lt;")}</pre>`);
+    win.document.write(
+      `<pre style="font-family:sans-serif;padding:24px">${text.replace(/</g, "&lt;")}</pre>`
+    );
     win.document.close();
     win.print();
   }
@@ -77,13 +90,24 @@ export function RecipeDetailView({
       ? recipe.titleTranslated || recipe.title
       : recipe.title || "Untitled Recipe";
 
+  const photoLabel =
+    recipe.sourceLanguage === "en" && recipe.photoDataUrls.length > 1
+      ? "Photos"
+      : recipe.sourceLanguage === "en"
+        ? "NoteGPT Image"
+        : "Original Photo";
+
   return (
     <div style={styles.app}>
       <div style={styles.toolbar}>
         <button type="button" style={styles.backBtn} onClick={onBack}>
           ← Recipes
         </button>
-        <button type="button" style={{ ...styles.backBtn, fontSize: "1.4rem" }} onClick={toggleFavorite}>
+        <button
+          type="button"
+          style={{ ...styles.backBtn, fontSize: "1.4rem" }}
+          onClick={toggleFavorite}
+        >
           {recipe.isFavorite ? "❤️" : "🤍"}
         </button>
       </div>
@@ -100,7 +124,7 @@ export function RecipeDetailView({
               }}
               onClick={() => setDisplay(mode)}
             >
-              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              {segmentLabels[mode]}
             </button>
           ))}
         </div>
@@ -154,12 +178,15 @@ export function RecipeDetailView({
 
         {recipe.photoDataUrls.length > 0 && (
           <>
-            <h2 style={{ fontSize: "1.25rem" }}>Original Photo</h2>
-            <img
-              src={recipe.photoDataUrls[0]}
-              alt="Original recipe"
-              style={{ width: "100%", borderRadius: 12 }}
-            />
+            <h2 style={{ fontSize: "1.25rem" }}>{photoLabel}</h2>
+            {recipe.photoDataUrls.map((url, i) => (
+              <img
+                key={url}
+                src={url}
+                alt={i === 0 ? "NoteGPT recipe" : "Original handwriting"}
+                style={{ width: "100%", borderRadius: 12, marginBottom: 12 }}
+              />
+            ))}
           </>
         )}
 
@@ -171,7 +198,7 @@ export function RecipeDetailView({
             Print / Save as PDF
           </button>
           <button type="button" style={styles.btnSecondary} onClick={handleTranslate} disabled={busy}>
-            {busy ? "Translating…" : "Translate Recipe"}
+            {busy ? "Translating…" : translateLabel}
           </button>
           <button type="button" style={styles.btnSecondary} onClick={onEdit}>
             Edit

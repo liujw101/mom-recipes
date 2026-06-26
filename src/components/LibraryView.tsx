@@ -98,7 +98,7 @@ export function LibraryView({ onNavigate }: Props) {
         {filtered.length === 0 ? (
           <div style={styles.empty}>
             <p>No recipes yet.</p>
-            <p>Tap + to scan or add a recipe.</p>
+            <p>Tap + to import from NoteGPT or add a recipe.</p>
           </div>
         ) : (
           filtered.map((recipe) => (
@@ -167,10 +167,10 @@ export function LibraryView({ onNavigate }: Props) {
               style={styles.btnPrimary}
               onClick={() => {
                 setShowAddMenu(false);
-                onNavigate({ name: "scan" });
+                onNavigate({ name: "notegpt-import" });
               }}
             >
-              📷 Scan Recipe
+              📥 Import from NoteGPT
             </button>
             <button
               type="button"

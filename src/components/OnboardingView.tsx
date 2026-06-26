@@ -6,21 +6,21 @@ interface Props {
 
 const PAGES = [
   {
-    title: "Scan Paper Recipes",
+    title: "Translate in NoteGPT",
     subtitle:
-      "Take a photo of a handwritten recipe. The app reads the text so you can review and save it.",
-    icon: "📷",
+      "Photograph the handwritten recipe in NoteGPT (Chinese → English) and save the PNG to Photos.",
+    icon: "🌐",
   },
   {
-    title: "Review Before Saving",
+    title: "Import the PNG",
     subtitle:
-      "Always check the text — handwriting can be tricky. Fix anything before you save.",
-    icon: "✏️",
+      "Open Mom Recipes, tap +, choose Import from NoteGPT, and select that PNG file.",
+    icon: "📥",
   },
   {
-    title: "Search and Translate",
+    title: "Search & Chinese Toggle",
     subtitle:
-      "Find recipes by name or ingredient. Switch between Chinese and English anytime.",
+      "Find recipes anytime. Tap Chinese to see a Chinese version, or edit anything before saving.",
     icon: "🔍",
   },
 ];

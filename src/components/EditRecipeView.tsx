@@ -80,9 +80,11 @@ export function EditRecipeView({ initial, photoDataUrl, isNew, onSave, onCancel 
       </div>
 
       <div style={styles.section}>
-        {recipe.photoDataUrls[0] && (
-          <>
-            <div style={styles.label}>Scanned Photo</div>
+                {recipe.photoDataUrls[0] && (
+                  <>
+                    <div style={styles.label}>
+                      {recipe.sourceLanguage === "en" ? "NoteGPT Image" : "Scanned Photo"}
+                    </div>
             <img
               src={recipe.photoDataUrls[0]}
               alt="Scanned recipe"
