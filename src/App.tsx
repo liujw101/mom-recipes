@@ -46,11 +46,12 @@ export default function App() {
     return (
       <NoteGPTImportView
         onCancel={() => setScreen({ name: "library" })}
-        onComplete={(recipe) => {
+        onComplete={({ recipe, importError }) => {
           setScreen({
             name: "edit",
             recipeId: recipe.id,
             draft: recipe,
+            importError,
           });
         }}
       />
@@ -64,6 +65,7 @@ export default function App() {
         initial={initial}
         photoDataUrl={screen.photoDataUrl}
         isNew={!screen.recipeId || !!screen.draft}
+        importError={screen.importError}
         onSave={handleSave}
         onCancel={() =>
           setScreen(

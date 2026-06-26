@@ -1,78 +1,160 @@
 import type { ParsedRecipe } from "../types/recipe";
 import { hasGeminiOcr } from "./geminiOcrService";
+import {
+  loadImageFromFile,
+  prepareImagesForChineseOCR,
+} from "./imagePreprocess";
+import {
+  normalizeRecipeJson,
+  parsedRecipeHasContent,
+} from "./normalizeRecipeJson";
+import { parseRecipeText } from "./recipeParser";
 
 const MODEL = "gemini-2.0-flash";
 
-const NOTEGPT_PROMPT = `This image is an output PNG from NoteGPT's AI Image Translator.
-It shows a recipe translated into English (clean printed/rendered text on the image, not handwriting).
+const STRUCTURED_PROMPT = `This image is from NoteGPT's AI Image Translator (a recipe photo with translated text).
 
-Extract the recipe into JSON only (no markdown):
+The image may show:
+- English translation only (rendered text on the image)
+- Side-by-side Chinese and English (extract ENGLISH only)
+- Text overlaid on a photo of handwritten recipe
+
+Extract the ENGLISH recipe into JSON with this exact structure:
 {
-  "title": "dish name in English",
-  "ingredients": ["one line per ingredient with amounts, e.g. 2 cups flour"],
-  "steps": ["step 1 in order", "step 2"],
-  "notes": "extra notes or empty string"
+  "title": "dish name",
+  "ingredients": [{"amount": "2 cups", "text": "flour"}, {"amount": "", "text": "salt"}],
+  "steps": ["step 1", "step 2"],
+  "notes": "optional notes or empty string"
 }
 
 Rules:
-- Transcribe the English text exactly as shown on the image
-- Do NOT translate or rewrite — copy what you see
-- Split into ingredients vs steps even if the layout is informal
-- Keep measurement units (g, ml, cup, tsp) with ingredients
-- Empty string / empty arrays if a section is missing`;
+- Copy English text exactly as shown — do not re-translate
+- Every ingredient needs "text"; put measurements in "amount" when visible
+- Number steps in cooking order
+- If no section is visible, use empty string or empty array`;
 
-interface GeminiRecipeJson {
-  title?: string;
-  ingredients?: string[];
-  steps?: string[];
-  notes?: string;
-}
+const RAW_TEXT_PROMPT = `This image is from NoteGPT's AI Image Translator showing a recipe.
+
+Transcribe ALL English recipe text visible in the image, line by line, exactly as written.
+Include title, ingredients (with amounts), and steps.
+If both Chinese and English appear, transcribe ENGLISH only.
+Do not add commentary — output plain text only.`;
+
+const RECIPE_JSON_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    title: { type: "STRING" },
+    ingredients: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          amount: { type: "STRING" },
+          text: { type: "STRING" },
+        },
+        required: ["text"],
+      },
+    },
+    steps: { type: "ARRAY", items: { type: "STRING" } },
+    notes: { type: "STRING" },
+  },
+  required: ["title", "ingredients", "steps"],
+};
 
 function geminiApiKey(): string | undefined {
   return import.meta.env.VITE_GEMINI_API_KEY?.trim() || undefined;
-}
-
-function parseGeminiJson(raw: string): GeminiRecipeJson {
-  const trimmed = raw.trim();
-  const jsonText = trimmed.startsWith("{")
-    ? trimmed
-    : trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  return JSON.parse(jsonText) as GeminiRecipeJson;
-}
-
-function toParsedRecipe(data: GeminiRecipeJson): ParsedRecipe {
-  const title = (data.title ?? "").trim();
-  const ingredients = (data.ingredients ?? []).map((s) => s.trim()).filter(Boolean);
-  const steps = (data.steps ?? []).map((s) => s.trim()).filter(Boolean);
-  const notes = (data.notes ?? "").trim();
-
-  return {
-    title,
-    ingredients,
-    steps: steps.length ? steps : [""],
-    notes,
-    detectedLanguage: "en",
-  };
-}
-
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const comma = result.indexOf(",");
-      resolve(comma >= 0 ? result.slice(comma + 1) : result);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 export function canImportNoteGPT(): boolean {
   return hasGeminiOcr();
 }
 
-/** Extract English recipe text from a NoteGPT output PNG. */
+async function prepareImageForApi(file: File): Promise<{ base64: string; mimeType: string }> {
+  const img = await loadImageFromFile(file);
+  const prepared = prepareImagesForChineseOCR(img);
+  const canvas = prepared[0]?.canvas ?? document.createElement("canvas");
+  if (!prepared[0]) {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext("2d")!.drawImage(img, 0, 0);
+  }
+
+  let quality = 0.92;
+  let dataUrl = canvas.toDataURL("image/jpeg", quality);
+  while (dataUrl.length > 4_000_000 && quality > 0.5) {
+    quality -= 0.1;
+    dataUrl = canvas.toDataURL("image/jpeg", quality);
+  }
+
+  const comma = dataUrl.indexOf(",");
+  return {
+    base64: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl,
+    mimeType: "image/jpeg",
+  };
+}
+
+async function callGemini(
+  apiKey: string,
+  base64: string,
+  mimeType: string,
+  prompt: string,
+  options?: { jsonSchema?: object }
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+
+  const generationConfig: Record<string, unknown> = {
+    temperature: 0.1,
+  };
+
+  if (options?.jsonSchema) {
+    generationConfig.responseMimeType = "application/json";
+    generationConfig.responseSchema = options.jsonSchema;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            { inline_data: { mime_type: mimeType, data: base64 } },
+          ],
+        },
+      ],
+      generationConfig,
+    }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error("Rate limit reached. Wait a minute and try again.");
+    }
+    throw new Error(`Import failed (${response.status}). Try again or enter manually.`);
+  }
+
+  const payload = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+
+  const text = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if (!text) {
+    throw new Error("Could not read text from the PNG.");
+  }
+  return text;
+}
+
+function parseJsonResponse(raw: string): ParsedRecipe {
+  const trimmed = raw.trim();
+  const jsonText = trimmed.startsWith("{")
+    ? trimmed
+    : trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const data = JSON.parse(jsonText) as Record<string, unknown>;
+  return normalizeRecipeJson(data, "en");
+}
+
+/** Extract English recipe from a NoteGPT output PNG (two-pass). */
 export async function extractRecipeFromNoteGPTPng(
   file: File,
   onProgress?: (message: string) => void
@@ -82,57 +164,39 @@ export async function extractRecipeFromNoteGPTPng(
     throw new Error("Smart import is not configured. Use Add Manually instead.");
   }
 
-  onProgress?.("Reading your NoteGPT image…");
+  onProgress?.("Preparing image…");
+  const { base64, mimeType } = await prepareImageForApi(file);
 
-  const base64 = await fileToBase64(file);
-  const mimeType = file.type || "image/png";
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: NOTEGPT_PROMPT },
-            { inline_data: { mime_type: mimeType, data: base64 } },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: "application/json",
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    if (response.status === 429) {
-      throw new Error("Rate limit reached. Wait a minute and try again.");
-    }
-    throw new Error(`Import failed (${response.status}). You can still edit manually.`);
-  }
-
-  const payload = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-
-  const text = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-  if (!text) {
-    throw new Error("Could not read text from the PNG. Check the image and try again.");
-  }
+  onProgress?.("Reading recipe from NoteGPT image…");
+  let parsed: ParsedRecipe | null = null;
 
   try {
-    const parsed = toParsedRecipe(parseGeminiJson(text));
-    if (!parsed.title && parsed.ingredients.length === 0 && parsed.steps.every((s) => !s.trim())) {
-      throw new Error("No recipe text found in the PNG.");
-    }
-    return parsed;
+    const jsonText = await callGemini(apiKey, base64, mimeType, STRUCTURED_PROMPT, {
+      jsonSchema: RECIPE_JSON_SCHEMA,
+    });
+    parsed = parseJsonResponse(jsonText);
   } catch {
-    throw new Error("Could not parse the recipe from the PNG. You can edit manually.");
+    parsed = null;
   }
+
+  if (!parsed || !parsedRecipeHasContent(parsed)) {
+    onProgress?.("Trying alternate read…");
+    const plainText = await callGemini(apiKey, base64, mimeType, RAW_TEXT_PROMPT);
+    parsed = parseRecipeText(plainText);
+    if (parsed.detectedLanguage !== "en") {
+      parsed.detectedLanguage = "en";
+    }
+  }
+
+  if (!parsedRecipeHasContent(parsed)) {
+    throw new Error("No recipe text found in the PNG. Check the image or enter manually.");
+  }
+
+  if (!parsed.steps.length) {
+    parsed.steps = [""];
+  }
+
+  return parsed;
 }
 
 export function fileToDataUrl(file: File): Promise<string> {
@@ -143,3 +207,5 @@ export function fileToDataUrl(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+export { parsedRecipeHasContent };

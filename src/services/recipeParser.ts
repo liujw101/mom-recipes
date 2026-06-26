@@ -1,4 +1,5 @@
-import type { ParsedRecipe, RecipeLanguage } from "../types/recipe";
+import type { ParsedIngredient, ParsedRecipe, RecipeLanguage } from "../types/recipe";
+import { splitIngredientLine } from "./normalizeRecipeJson";
 
 const INGREDIENT_HEADERS = ["ingredients", "ingredient", "材料", "用料", "原料", "食材"];
 const STEP_HEADERS = ["steps", "step", "directions", "method", "做法", "步骤", "作法", "制作"];
@@ -23,7 +24,7 @@ export function parseRecipeText(ocrText: string): ParsedRecipe {
   type Section = "unknown" | "title" | "ingredients" | "steps" | "notes";
   let section: Section = "unknown";
   let title = "";
-  const ingredients: string[] = [];
+  const ingredientLines: string[] = [];
   const steps: string[] = [];
   const notes: string[] = [];
 
@@ -48,7 +49,7 @@ export function parseRecipeText(ocrText: string): ParsedRecipe {
         else if (looksLikeStep(line)) {
           section = "steps";
           steps.push(stripStepPrefix(line));
-        } else ingredients.push(stripBullet(line));
+        } else ingredientLines.push(stripBullet(line));
         break;
       case "title":
         if (!title) title = line;
@@ -61,7 +62,7 @@ export function parseRecipeText(ocrText: string): ParsedRecipe {
         if (looksLikeStep(line)) {
           section = "steps";
           steps.push(stripStepPrefix(line));
-        } else ingredients.push(stripBullet(line));
+        } else ingredientLines.push(stripBullet(line));
         break;
       case "steps":
         steps.push(stripStepPrefix(line));
@@ -72,14 +73,18 @@ export function parseRecipeText(ocrText: string): ParsedRecipe {
     }
   }
 
-  if (!title && ingredients.length > 0) {
-    title = ingredients.shift() ?? "";
+  if (!title && ingredientLines.length > 0) {
+    title = ingredientLines.shift() ?? "";
   }
+
+  const ingredients: ParsedIngredient[] = ingredientLines
+    .map((line) => splitIngredientLine(line))
+    .filter((i) => i.text);
 
   return {
     title,
     ingredients,
-    steps: steps.length ? steps : [""],
+    steps: steps.length ? steps : [],
     notes: notes.join("\n"),
     detectedLanguage: detectLanguage(ocrText),
   };

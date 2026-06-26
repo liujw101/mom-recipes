@@ -1,4 +1,5 @@
-import type { ParsedRecipe, RecipeLanguage } from "../types/recipe";
+import type { ParsedRecipe } from "../types/recipe";
+import { normalizeRecipeJson, parsedRecipeHasContent } from "./normalizeRecipeJson";
 import type { ChineseScript } from "./ocrService";
 
 const MODEL = "gemini-2.0-flash";
@@ -46,44 +47,12 @@ Rules:
 - Split ingredients and steps even when headings are missing on the paper`;
 }
 
-function detectLanguage(text: string): RecipeLanguage {
-  const hasChinese = /[\u4e00-\u9fff]/.test(text);
-  const hasEnglish = /[a-zA-Z]/.test(text);
-  if (hasChinese && hasEnglish) return "mixed";
-  if (hasChinese) return "zh-Hans";
-  if (hasEnglish) return "en";
-  return "mixed";
-}
-
-interface GeminiRecipeJson {
-  title?: string;
-  ingredients?: string[];
-  steps?: string[];
-  notes?: string;
-}
-
-function parseGeminiJson(raw: string): GeminiRecipeJson {
+function parseGeminiJson(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
   const jsonText = trimmed.startsWith("{")
     ? trimmed
     : trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  return JSON.parse(jsonText) as GeminiRecipeJson;
-}
-
-function toParsedRecipe(data: GeminiRecipeJson): ParsedRecipe {
-  const title = (data.title ?? "").trim();
-  const ingredients = (data.ingredients ?? []).map((s) => s.trim()).filter(Boolean);
-  const steps = (data.steps ?? []).map((s) => s.trim()).filter(Boolean);
-  const notes = (data.notes ?? "").trim();
-  const blob = [title, ...ingredients, ...steps, notes].join("\n");
-
-  return {
-    title,
-    ingredients,
-    steps: steps.length ? steps : [""],
-    notes,
-    detectedLanguage: detectLanguage(blob),
-  };
+  return JSON.parse(jsonText) as Record<string, unknown>;
 }
 
 export async function recognizeRecipeWithGemini(
@@ -140,10 +109,11 @@ export async function recognizeRecipeWithGemini(
   }
 
   try {
-    const parsed = toParsedRecipe(parseGeminiJson(text));
-    if (!parsed.title && parsed.ingredients.length === 0 && parsed.steps.every((s) => !s.trim())) {
+    const parsed = normalizeRecipeJson(parseGeminiJson(text));
+    if (!parsedRecipeHasContent(parsed)) {
       throw new Error("Could not read any recipe text from the photo.");
     }
+    if (!parsed.steps.length) parsed.steps = [""];
     return parsed;
   } catch {
     throw new Error("Smart scan could not parse the recipe. Try again or edit manually.");

@@ -23,9 +23,14 @@ export interface Recipe {
   updatedAt: string;
 }
 
+export interface ParsedIngredient {
+  text: string;
+  amount?: string;
+}
+
 export interface ParsedRecipe {
   title: string;
-  ingredients: string[];
+  ingredients: ParsedIngredient[];
   steps: string[];
   notes: string;
   detectedLanguage: RecipeLanguage;
@@ -39,7 +44,13 @@ export type LibraryFilter =
 export type Screen =
   | { name: "library" }
   | { name: "detail"; recipeId: string }
-  | { name: "edit"; recipeId?: string; draft?: Partial<Recipe>; photoDataUrl?: string }
+  | {
+      name: "edit";
+      recipeId?: string;
+      draft?: Partial<Recipe>;
+      photoDataUrl?: string;
+      importError?: string;
+    }
   | { name: "notegpt-import" };
 
 export function displayModeLabels(sourceLanguage: RecipeLanguage): {

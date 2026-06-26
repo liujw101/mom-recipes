@@ -12,6 +12,7 @@ interface Props {
   initial?: Partial<Recipe>;
   photoDataUrl?: string;
   isNew?: boolean;
+  importError?: string;
   onSave: (recipe: Recipe) => void;
   onCancel: () => void;
 }
@@ -20,7 +21,10 @@ export function parsedToRecipe(parsed: ParsedRecipe, photoDataUrl?: string): Rec
   const recipe = createEmptyRecipe();
   recipe.title = parsed.title;
   recipe.ingredients = parsed.ingredients.length
-    ? parsed.ingredients.map((text) => ({ text }))
+    ? parsed.ingredients.map((item) => ({
+        text: item.text,
+        amount: item.amount,
+      }))
     : [{ text: "" }];
   recipe.steps = parsed.steps.length ? parsed.steps : [""];
   recipe.notes = parsed.notes;
@@ -29,7 +33,14 @@ export function parsedToRecipe(parsed: ParsedRecipe, photoDataUrl?: string): Rec
   return recipe;
 }
 
-export function EditRecipeView({ initial, photoDataUrl, isNew, onSave, onCancel }: Props) {
+export function EditRecipeView({
+  initial,
+  photoDataUrl,
+  isNew,
+  importError,
+  onSave,
+  onCancel,
+}: Props) {
   const [recipe, setRecipe] = useState<Recipe>(() => ({
     ...createEmptyRecipe(),
     ...initial,
@@ -80,11 +91,28 @@ export function EditRecipeView({ initial, photoDataUrl, isNew, onSave, onCancel 
       </div>
 
       <div style={styles.section}>
-                {recipe.photoDataUrls[0] && (
-                  <>
-                    <div style={styles.label}>
-                      {recipe.sourceLanguage === "en" ? "NoteGPT Image" : "Scanned Photo"}
-                    </div>
+        {importError && (
+          <div
+            style={{
+              background: "#fff3e0",
+              color: "#e65100",
+              padding: "12px 14px",
+              borderRadius: 10,
+              marginBottom: 16,
+              lineHeight: 1.5,
+              fontSize: "0.95rem",
+            }}
+          >
+            Auto-read failed — please fill in the recipe from the NoteGPT image below.
+            <div style={{ marginTop: 6, fontSize: "0.85rem" }}>{importError}</div>
+          </div>
+        )}
+
+        {recipe.photoDataUrls[0] && (
+          <>
+            <div style={styles.label}>
+              {recipe.sourceLanguage === "en" ? "NoteGPT Image" : "Scanned Photo"}
+            </div>
             <img
               src={recipe.photoDataUrls[0]}
               alt="Scanned recipe"

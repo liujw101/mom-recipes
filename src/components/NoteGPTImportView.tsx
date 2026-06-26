@@ -3,6 +3,7 @@ import {
   canImportNoteGPT,
   extractRecipeFromNoteGPTPng,
   fileToDataUrl,
+  parsedRecipeHasContent,
 } from "../services/notegptImportService";
 import { parsedToRecipe } from "./EditRecipeView";
 import type { ParsedRecipe, Recipe } from "../types/recipe";
@@ -10,9 +11,14 @@ import { styles } from "../styles";
 
 const NOTEGPT_URL = "https://notegpt.io/ai-image-translator";
 
+export interface NoteGPTImportResult {
+  recipe: Recipe;
+  importError?: string;
+}
+
 interface Props {
   onCancel: () => void;
-  onComplete: (recipe: Recipe) => void;
+  onComplete: (result: NoteGPTImportResult) => void;
 }
 
 export function NoteGPTImportView({ onCancel, onComplete }: Props) {
@@ -22,36 +28,53 @@ export function NoteGPTImportView({ onCancel, onComplete }: Props) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [pendingOriginal, setPendingOriginal] = useState<string | undefined>();
+  const [failedImport, setFailedImport] = useState<{
+    pngDataUrl: string;
+    message: string;
+  } | null>(null);
 
   async function handleNoteGptPng(file: File) {
     setBusy(true);
     setError("");
-    let parsed: ParsedRecipe | null = null;
+    setFailedImport(null);
 
     try {
       const pngDataUrl = await fileToDataUrl(file);
 
-      if (canImportNoteGPT()) {
-        try {
-          parsed = await extractRecipeFromNoteGPTPng(file, setProgress);
-        } catch (e) {
-          const message = e instanceof Error ? e.message : "Import failed";
-          setError(`${message} The PNG is attached — please type or fix the text below.`);
-          parsed = emptyEnglishParsed();
-        }
-      } else {
-        setError("Auto-read unavailable. The PNG is attached — please enter the recipe text manually.");
-        parsed = emptyEnglishParsed();
+      if (!canImportNoteGPT()) {
+        setFailedImport({
+          pngDataUrl,
+          message: "Auto-read unavailable. Enter the recipe from the image below.",
+        });
+        return;
       }
 
-      const recipe = buildRecipe(parsed, pngDataUrl, pendingOriginal);
-      onComplete(recipe);
+      try {
+        const parsed = await extractRecipeFromNoteGPTPng(file, setProgress);
+        if (!parsedRecipeHasContent(parsed)) {
+          throw new Error("No recipe text found in the PNG.");
+        }
+        const recipe = buildRecipe(parsed, pngDataUrl, pendingOriginal);
+        onComplete({ recipe });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Import failed";
+        setFailedImport({ pngDataUrl, message });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed. Try again.");
     } finally {
       setBusy(false);
       setProgress("");
     }
+  }
+
+  function continueManually() {
+    if (!failedImport) return;
+    const recipe = buildRecipe(emptyEnglishParsed(), failedImport.pngDataUrl, pendingOriginal);
+    onComplete({
+      recipe,
+      importError: failedImport.message,
+    });
   }
 
   return (
@@ -98,6 +121,32 @@ export function NoteGPTImportView({ onCancel, onComplete }: Props) {
           </p>
         )}
 
+        {failedImport && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ color: "#c0392b", marginBottom: 12, lineHeight: 1.5 }}>
+              {failedImport.message}
+            </p>
+            <img
+              src={failedImport.pngDataUrl}
+              alt="NoteGPT PNG preview"
+              style={{ width: "100%", borderRadius: 12, marginBottom: 12, border: "1px solid var(--border)" }}
+            />
+            <button type="button" style={styles.btnPrimary} onClick={continueManually}>
+              Continue manually with this image
+            </button>
+            <button
+              type="button"
+              style={{ ...styles.btnSecondary, marginTop: 12 }}
+              onClick={() => {
+                setFailedImport(null);
+                pngInputRef.current?.click();
+              }}
+            >
+              Try a different PNG
+            </button>
+          </div>
+        )}
+
         <input
           ref={pngInputRef}
           type="file"
@@ -122,23 +171,27 @@ export function NoteGPTImportView({ onCancel, onComplete }: Props) {
           }}
         />
 
-        <button
-          type="button"
-          style={styles.btnPrimary}
-          disabled={busy}
-          onClick={() => pngInputRef.current?.click()}
-        >
-          📥 Choose NoteGPT PNG
-        </button>
+        {!failedImport && (
+          <>
+            <button
+              type="button"
+              style={styles.btnPrimary}
+              disabled={busy}
+              onClick={() => pngInputRef.current?.click()}
+            >
+              📥 Choose NoteGPT PNG
+            </button>
 
-        <button
-          type="button"
-          style={{ ...styles.btnSecondary, marginTop: 12 }}
-          disabled={busy}
-          onClick={() => originalInputRef.current?.click()}
-        >
-          📷 Attach original Chinese photo (optional)
-        </button>
+            <button
+              type="button"
+              style={{ ...styles.btnSecondary, marginTop: 12 }}
+              disabled={busy}
+              onClick={() => originalInputRef.current?.click()}
+            >
+              📷 Attach original Chinese photo (optional)
+            </button>
+          </>
+        )}
 
         {pendingOriginal && (
           <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: 8 }}>
@@ -158,7 +211,7 @@ function emptyEnglishParsed(): ParsedRecipe {
   return {
     title: "",
     ingredients: [],
-    steps: [""],
+    steps: [],
     notes: "",
     detectedLanguage: "en",
   };
