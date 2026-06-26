@@ -109,7 +109,6 @@ export async function extractRecipeFromNoteGPTPng(
   });
 
   if (!response.ok) {
-    const detail = await response.text();
     if (response.status === 429) {
       throw new Error("Rate limit reached. Wait a minute and try again.");
     }
