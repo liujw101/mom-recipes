@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import {
-  canImportNoteGPT,
   extractRecipeFromNoteGPTPng,
   fileToDataUrl,
   parsedRecipeHasContent,
@@ -40,14 +39,6 @@ export function NoteGPTImportView({ onCancel, onComplete }: Props) {
 
     try {
       const pngDataUrl = await fileToDataUrl(file);
-
-      if (!canImportNoteGPT()) {
-        setFailedImport({
-          pngDataUrl,
-          message: "Auto-read unavailable. Enter the recipe from the image below.",
-        });
-        return;
-      }
 
       try {
         const parsed = await extractRecipeFromNoteGPTPng(file, setProgress);

@@ -53,6 +53,51 @@ async function runRecognition(
   return { text, confidence: data.confidence };
 }
 
+/** Read rendered English text (e.g. NoteGPT PNG) on-device — no API quota. */
+export async function recognizeEnglishTextFromImage(
+  file: File,
+  onProgress?: (message: string) => void
+): Promise<string> {
+  onProgress?.("Loading text reader (one-time download)…");
+  const img = await loadImageFromFile(file);
+  const prepared = prepareImagesForChineseOCR(img);
+  const canvas = prepared[0]?.canvas;
+  if (!canvas) {
+    throw new Error("Could not prepare the image for reading.");
+  }
+
+  const worker = await createWorker("eng", OEM.LSTM_ONLY, {
+    logger: (m) => {
+      if (m.status === "recognizing text") {
+        onProgress?.(`Reading text… ${Math.round((m.progress ?? 0) * 100)}%`);
+      }
+    },
+  });
+
+  try {
+    let bestText = "";
+    let bestScore = 0;
+
+    for (const { mode, label } of PSM_MODES) {
+      onProgress?.(`Scanning (${label})…`);
+      const { text, confidence } = await runRecognition(worker, canvas, mode);
+      if (!text) continue;
+
+      const score = text.length + confidence;
+      if (score > bestScore) {
+        bestScore = score;
+        bestText = text;
+      }
+
+      if (confidence >= 75 && text.length >= 40) break;
+    }
+
+    return bestText.trim();
+  } finally {
+    await worker.terminate();
+  }
+}
+
 export async function recognizeTextFromImage(
   file: File,
   onProgress?: (message: string) => void,
